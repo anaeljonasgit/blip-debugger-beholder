@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+<html>
+<head>
+
+    <title>Debugger Beholder - Berlin Team</title>
+    <style>
+
+        * {
+            padding: 0;
+            margin: 0;
+            outline: 0;
+            box-sizing: border-box;
+            overflow-y: hidden;
+        }
+
+        body {
+            padding: 0;
+            margin: 0;
+        }
+
+        textarea {
+            width: 100%;
+            height: 100vh;
+            padding: 20px;
+            border: none;
+            font-family: Arial, Helvetica, sans-serif;
+            font-weight: bold;
+            font-size: 20px;
+            resize: none;
+            color: white;
+            background: #242424;
+            overflow-y: scroll;
+            overflow-x: hidden;
+        }
+
+        /* width */
+        ::-webkit-scrollbar {
+        width: 10px;
+        }
+        /* Track */
+        ::-webkit-scrollbar-track {
+        background: #242424;
+        }
+        /* Handle */
+        ::-webkit-scrollbar-thumb {
+        background: #242424;
+        }
+        /* Handle on hover */
+        ::-webkit-scrollbar-thumb:hover {
+        background: #242424;
+        }
+
+    </style>
+    
+</head>
+<body>
+
+    <textarea></textarea>
+
+    <script>
+
+        const input = document.querySelector('textarea');
+
+        input.addEventListener('keypress', (event) => {
+            if (event.key == 'Enter') {
+                event.preventDefault();
+                interface.input.send();
+            }
+        });
+
+        const interface = {
+            input: {
+                clean() {
+                    input.value = '';
+                },
+
+                send() {
+                    interface.content = input.value;
+                    debug.test(JSON.parse(input.value));
+                }
+            }
+        };
+
+    </script>
+
+    <script>
+
+        code = ``;
+        const debug = {
+            memory: {
+                entires: [],
+                mocks: [],
+                variables: [],
+                scripts: []
+            },
+            tests: [],
+            errors: [],
+            reports: [],
+
+            mock(mock) {
+                debug.memory.mocks = [];
+                Object.entries(mock).map(variable => {
+                    debug.memory.mocks.push({
+                        type: 'Set',
+                        variable: variable[0],
+                        value: variable[1]
+                    });
+                });
+                if (debug.memory.entires.length) {
+                    debug.next();
+                } else {
+                    interface.input.send();
+                };
+            },
+
+            test(beholder) {
+                // Reset the code and debug.
+                debug.memory.variables = [];
+                debug.memory.scripts = [];
+                debug.tests = [];
+                debug.errors = [];
+                debug.reports = [];
+                code = ``;
+                try { eval('clear();'); } catch {};
+
+                // Process the entire JSON of the process.
+                if (beholder.states) {
+                    // Save the entire state of the JSON.
+                    let entire_beholder = beholder.states;
+
+                    // Create a new JSON struture.
+                    function createSingleStruture() {
+                        return {
+                            "id": "Single process",
+                            "inputActions": [],
+                            "outputActions": []
+                        };
+                    };
+
+                    // Separete the actions by input.content.
+                    function processAction(action) {
+                        // Get the input variables.
+                        let variables = action.parsedSettings.inputVariables;
+
+                        if (variables) {
+                            // Detected the second input.content.
+                            if (variables.includes('input.content') && detected_input_content) {
+                                debug.memory.entires.push(beholder);
+                                beholder = createSingleStruture();
+                                beholder.inputActions.push(action);
+                                detected_input_content = false;
+                                return null;
+                            };
+
+                            // Detected the input.content.
+                            if (variables.includes('input.content')) {
+                                detected_input_content = true;
+                                return null;
+                            }
+                        };
+
+                        // Save the action before save in memory.
+                        beholder.inputActions.push(action);
+                    };
+
+                    // Create a new JSON instance.
+                    beholder = createSingleStruture();
+
+                    // Set the JSON into only one.
+                    let detected_input_content = false;
+                    entire_beholder.map(async single => {
+                        single.inputActions.map(action => {
+                            processAction(action);
+                        });
+
+                        single.outputActions.map(action => {
+                            processAction(action);
+                        });
+                    });
+
+                    // Save the last beholder detection.
+                    debug.memory.entires.push(beholder);
+
+                    // Execute the JSON test.
+                    return debug.test(debug.memory.entires[0]);
+                };
+
+                // Inject the mocked variables.
+                debug.memory.mocks.map(mock => {
+                    debug.memory.variables.push(mock);
+                });
+
+                // Check input actions.
+                beholder.inputActions.map(action => {
+                    debug.check(action);
+                });
+
+                // Check output actions.
+                beholder.outputActions.map(action => {
+                    debug.check(action);
+                });
+
+                // Execute the code.
+                debug.execute();
+            },
+
+            next() {
+                // Go to the next test if has new entires in memory.
+                debug.test(debug.memory.entires[0]);
+                debug.memory.entires.shift();
+            },
+
+            check(action) {
+                // Ignore the 'TrackContactsJourney' action.
+                if (action.type == 'TrackContactsJourney') return null;
+
+                // Do the test.
+                let test = {
+                    type: action.type,
+                    error_message: action.error || false,
+                    passed: !action.error,
+                    status: !action.error ? '✔️' : '❌'
+                };
+
+                // Get the source of the action.
+                let source = action.parsedSettings;
+
+                // Add the source of action.
+                switch (test.type) {
+                    case 'TrackEvent':
+                        test.source = {
+                            track: source.category,
+                            value: source.action
+                        };
+                        break;
+                    case 'SetVariable':
+                        test.source = {
+                            variable: source.variable,
+                            value: source.value
+                        };
+                        break;
+                    case 'ExecuteScript':
+                        test.source = {
+                            script: source.source,
+                            inputs: source.inputVariables,
+                            variable: source.outputVariable
+                        };
+                        break;
+                };
+
+                // Add the test to the test array.
+                debug.tests.push(test);
+
+                // Add the test to the error array.
+                if (!test.passed) {
+                    debug.errors.push(test);
+                };
+            },
+
+            verify: {
+                mocked_variables() {
+                    console.log('\n-=-=-=-=-=-=-=-=-=-=-=-= MOCKS -=-=-=-=-=-=-=-=-=-=-=-=\n');
+
+                    let missing_mocked_variables = [];
+                    let atual_script_inputs_variables = [];
+                    let atual_variables = [];
+                    debug.memory.scripts.map(script => {
+                        atual_variables.push(script.variable);
+                        script.inputs.map(input => {
+                            atual_script_inputs_variables.push(input);
+                        });
+                    });
+                    debug.memory.variables.map(variable => {
+                        atual_variables.push(variable.variable);
+                    });
+                    for (i in atual_script_inputs_variables) {
+                        if (!atual_variables.includes(atual_script_inputs_variables[i]) && !missing_mocked_variables.includes(atual_script_inputs_variables[i])) {
+                            missing_mocked_variables.push(atual_script_inputs_variables[i]);
+                        };
+                    };
+                    if (missing_mocked_variables.length) {
+                        console.table(missing_mocked_variables.map(not_mocked_variable => {
+                            return {
+                                'variable': not_mocked_variable,
+                                'mocked': 'Não mockada ❌'
+                            };
+                        }));
+                        let debug_mock_code = `\n`;
+                        debug_mock_code += `debug.mock({\n`;
+                        debug_mock_code += `${missing_mocked_variables.map(not_mocked_variable => {
+                            return `    '${not_mocked_variable}': ''`
+                        }).join(`,\n`)}\n`;
+                        debug_mock_code += `});\n\n`;
+
+                        console.log(debug_mock_code);
+                        throw new Error('Faltando mockar as variáveis acima (mockar).');
+                    };
+                }
+            },
+
+            execute() {
+                // Write the code.
+                debug.tests.map(action => {
+                    switch (action.type) {
+                        case 'SetVariable':
+                            debug.create.variable(action.source);
+                            break;
+                        case 'ExecuteScript':
+                            debug.create.script(action.source);
+                            break;
+                    };
+                });
+
+                // Check missing mocked variables.
+                debug.verify.mocked_variables();
+
+                // Print the memory.
+                console.log('\n-=-=-=-=-=-=-=-=-=-=-=-= MEMORY -=-=-=-=-=-=-=-=-=-=-=-=\n');
+                console.log(debug.memory);
+
+                // Run the code ⚠️.
+                console.log(`\n-=-=-=-=-=-=-=-=-=-=-=-= CREATING CODE -=-=-=-=-=-=-=-=-=-=-=-=\n`);
+                console.log(code);
+                eval(code);
+
+                // Print the variables.
+                console.log(`\n-=-=-=-=-=-=-=-=-=-=-=-= VARIABLES -=-=-=-=-=-=-=-=-=-=-=-=\n`);
+                let variables = [];
+                debug.memory.variables.map(variable => {
+                    /// Create the variable.
+                    if (variable.type == 'Set') {
+                        variables.push({
+                            variable: variable.variable,
+                            value: variable.value
+                        });
+                    };
+                });
+                // Print the tracking.
+                console.table(variables);
+
+                // Print the trackings.
+                console.log(`\n-=-=-=-=-=-=-=-=-=-=-=-= TRACKINGS -=-=-=-=-=-=-=-=-=-=-=-=\n`);
+                let trackings = [];
+                debug.tests.map(tracking => {
+                    /// Create the tracking.
+                    if (tracking.type == 'TrackEvent') {
+                        trackings.push({
+                            tracking: tracking.source.track,
+                            value: tracking.source.value
+                        });
+                    };
+                });
+                // Print the tracking.
+                console.table(trackings);
+
+                // Execute the scripts in sequence.
+                console.log(`\n-=-=-=-=-=-=-=-=-=-=-=-= EXECUTANDO -=-=-=-=-=-=-=-=-=-=-=-=`);
+                debug.memory.scripts.map(script => {
+                    // Check if has errors finded.
+                    try {
+                        if (debug.errors[0].source.variable == script.variable) {
+                            throw new Error(`Erro no script '${debug.errors[0].source.variable}()': ${JSON.stringify(debug.errors[0].error_message)}`);
+                        };
+                    } catch {};
+
+                    // Create params for the function script.
+                    let params = script.inputs.map(variable => {
+                        for (i in debug.memory.variables) {
+                            if (debug.memory.variables[i].variable == variable) {
+                                return `'${debug.memory.variables[i].value}'`;
+                            };
+                        };
+                    }).filter(clean => {
+                        if (clean) return clean;
+                    });
+
+                    // Check the scope of the function.
+                    let scope = script.script.slice(1, script.script.indexOf(')')).length ? script.script.slice(1, script.script.indexOf(')')).split(', ') : '';
+
+                    if (scope.length < params.length) {
+                        throw new Error(`${script.variable}(${scope}) contém '${script.inputs.join(', ')}' como input, mas não espera ele como parâmetro da função.`);
+                    };
+
+                    // Check the input params.
+                    params = params.length ? params.join(', ') : '';
+
+                    // Log the script in execution.
+                    console.log(`\nTestando "${script.variable}(${params})"...\n`);
+
+                    // Find for a object in use on script.
+                    let object_detected_and_in_use = false;
+                    for (i in scope) {
+                        atual_param = params.split(',');
+                        try {
+                            if ((atual_param[i].includes('{') && atual_param[i].includes(':')) && (script.script.includes(`${scope[i]}.`) || script.script.includes(`${scope[i]}[`))) {
+                                object_detected_and_in_use = true;
+                            };
+                        } catch {};
+                    };
+
+                    // Check if is missing a JSON.parse().
+                    if (!script.script.includes('JSON.parse') && object_detected_and_in_use) {
+                        throw new Error(`Faltando um 'JSON.parse()' na função ${script.variable}(${scope}).`);
+                    };
+
+                    // Execute the script.
+                    eval(`${script.variable} = ${script.variable}(${params});`);
+                    eval(`${script.variable} = typeof ${script.variable} == 'object' ? JSON.stringify(${script.variable}) : ${script.variable};`);
+                    
+                    // Format the result.
+                    let result = [
+                        {
+                            status: 'Executado',
+                            script: script.variable,
+                            value: eval(`${script.variable}`),
+                            result: `Aprovado! ✔️`
+                        }
+                    ];
+
+                    // Add a report to the reports array.
+                    debug.reports.push(result);
+                    
+                    // Print the result.
+                    console.table(result);
+
+                    // Add the result of the function to variables array.
+                    debug.memory.variables.push({
+                        type: 'Process',
+                        variable: script.variable,
+                        value: eval(`${script.variable}`)
+                    });
+
+                    // Delete the function variable of the code.
+                    eval(`delete ${script.variable}`);
+                });
+
+                // Print the errors.
+                if (debug.errors.length) {
+                    console.log(`\n-=-=-=-=-=-=-=-=-=-=-=-= ERRORS -=-=-=-=-=-=-=-=-=-=-=-=\n`);
+                    let errors = [];
+                    debug.errors.map(error => {
+                        /// Create the error.
+                        errors.push({
+                            status: 'Error',
+                            value: error.error_message,
+                            type: error.type,
+                            result: 'Reprovado ❌'
+                        });
+                    });
+                    // Print the tracking.
+                    console.table(errors);
+                };
+            },
+
+            create: {
+                // Create variables for the code.
+                variable({ variable, value }) {
+                    debug.memory.variables.push({
+                        type: 'Set',
+                        variable,
+                        value
+                    });
+
+                    // Create commented variables in the code.
+                    code += `// VARIABLE ->\n`;
+                    code += `// ${variable} = '${value}';\n\n`;
+                },
+
+                // Create functions for the code.
+                script({ script, inputs, variable }) {
+                    // Separete the resource of script (1/2).
+                    resource = script.slice(0, script.indexOf('function run'));
+                    script = script.replace(resource, '');
+
+                    // Clean the script to a executable.
+                    script = script.replace('function run', '');
+                    script = script.replace(')', ') =>');
+
+                    // Separete the resource of script (2/2).
+                    if (resource) {
+                        resource = `\n    // RESOURCE ->\n    ` + resource + `// END OF RESOURCE ->\n    `;
+                        script = script.replace(') => {', `) => {${resource}`);
+                    };
+
+                    // Add the script to the scripts array.
+                    debug.memory.scripts.push({
+                        script,
+                        inputs,
+                        variable
+                    });
+
+                    // Create commented functions in the code.
+                    code += `// FUNCTION -> (${inputs.join(', ')})\n`;
+                    code += `var ${variable} = ${script}\n\n`;
+                }
+            },
+
+            report() {
+                console.log(`\n-=-=-=-=-=-=-=-=-=-=-=-= REPORT -=-=-=-=-=-=-=-=-=-=-=-=\n`);
+                console.log('MOCKS', debug.memory.mocks, `\n\n`);
+                console.log('VARIABLES', debug.memory.variables, `\n\n`);
+                console.log('SCRIPTS', debug.memory.scripts, `\n\n`);
+                console.log('TESTS', debug.tests, `\n\n`);
+                console.log('ERRORS', debug.errors);
+            },
+
+            log(message) {
+                console.log({
+                    debug: message
+                });
+            }
+        };
+
+    </script>
+
+</body>
+</html>
