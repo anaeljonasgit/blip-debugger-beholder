@@ -1,0 +1,1 @@
+O Beholder do Take Blip (Blip) era muito bom, mas eu precisava de mais dados e fazer simulações, por isso criei um Blip Debugger que faz simulações e traz mais dados a partir do JSON do Blip Beholder.
